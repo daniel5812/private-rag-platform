@@ -127,6 +127,7 @@ Expected response:
   "service": "private-rag-platform",
   "version": "0.1.0"
 }
+```
 
 Planned Development Phases
 Phase 1 — Local Backend Foundation
