@@ -1,0 +1,10 @@
+services:
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: private-rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
