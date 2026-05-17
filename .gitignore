@@ -216,3 +216,31 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific local files
+.env.*
+!.env.example
+
+# Local document storage
+uploads/
+storage/
+data/
+tmp/
+
+# Local vector/database files
+*.sqlite
+*.sqlite3
+chroma/
+chromadb/
+vector_store/
+
+# Logs
+logs/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Docker local overrides
+docker-compose.override.yml
