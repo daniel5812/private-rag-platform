@@ -168,3 +168,5 @@ No cross-tenant document access
 Missing context should produce an explicit "not enough information" answer
 The LLM should not decide what data source to use
 
+docker compose -f infra/docker-compose.yml up --build
+docker compose -f infra/docker-compose.yml down
