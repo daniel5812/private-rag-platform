@@ -8,3 +8,22 @@ services:
       - "8000:8000"
     environment:
       APP_ENV: development
+      DATABASE_URL: postgresql://rag_user:rag_password@db:5432/private_rag
+    depends_on:
+      - db
+
+  db:
+    image: pgvector/pgvector:pg16-trixie
+    container_name: private-rag-db
+    environment:
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: rag_password
+      POSTGRES_DB: private_rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - private_rag_pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  private_rag_pgdata:
