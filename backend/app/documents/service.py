@@ -10,6 +10,10 @@ from app.documents.text_extractor import extract_text_from_file
 from app.embeddings.ollama_client import generate_embedding
 
 
+def _embedding_to_pgvector_text(embedding: list[float]) -> str:
+    return "[" + ",".join(str(value) for value in embedding) + "]"
+
+
 async def save_uploaded_document(
     file: UploadFile,
     tenant_id: str = "demo",
@@ -55,7 +59,7 @@ async def save_uploaded_document(
 
     for index, chunk in enumerate(chunks):
         embedding = await generate_embedding(chunk)
-        embedding_as_text = "[" + ",".join(str(value) for value in embedding) + "]"
+        embedding_as_text = _embedding_to_pgvector_text(embedding)
 
         await database.execute(
             """
@@ -80,3 +84,81 @@ async def save_uploaded_document(
     document = dict(row)
     document["id"] = str(document["id"])
     return document
+
+
+async def list_documents(tenant_id: str = "demo") -> list[dict]:
+    rows = await database.fetch(
+        """
+        SELECT
+            d.id::text AS id,
+            d.tenant_id,
+            d.filename,
+            d.content_type,
+            d.storage_path,
+            d.created_at::text AS created_at,
+            COUNT(c.id)::int AS chunk_count,
+            COUNT(c.embedding)::int AS chunks_with_embedding
+        FROM documents d
+        LEFT JOIN document_chunks c
+            ON c.document_id = d.id
+        WHERE d.tenant_id = $1
+        GROUP BY
+            d.id,
+            d.tenant_id,
+            d.filename,
+            d.content_type,
+            d.storage_path,
+            d.created_at
+        ORDER BY d.created_at DESC;
+        """,
+        tenant_id,
+    )
+
+    return [dict(row) for row in rows]
+
+
+async def get_document(document_id: str, tenant_id: str = "demo") -> dict | None:
+    row = await database.fetchrow(
+        """
+        SELECT
+            id::text AS id,
+            tenant_id,
+            filename,
+            content_type,
+            storage_path,
+            created_at::text AS created_at
+        FROM documents
+        WHERE id = $1::uuid
+          AND tenant_id = $2;
+        """,
+        document_id,
+        tenant_id,
+    )
+
+    if row is None:
+        return None
+
+    return dict(row)
+
+
+async def get_document_chunks(document_id: str, tenant_id: str = "demo") -> list[dict]:
+    rows = await database.fetch(
+        """
+        SELECT
+            id::text AS id,
+            document_id::text AS document_id,
+            tenant_id,
+            chunk_index,
+            content,
+            embedding IS NOT NULL AS has_embedding,
+            created_at::text AS created_at
+        FROM document_chunks
+        WHERE document_id = $1::uuid
+          AND tenant_id = $2
+        ORDER BY chunk_index ASC;
+        """,
+        document_id,
+        tenant_id,
+    )
+
+    return [dict(row) for row in rows]
