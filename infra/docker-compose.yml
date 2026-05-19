@@ -12,6 +12,7 @@ services:
       STORAGE_DIR: /app/storage
       OLLAMA_BASE_URL: http://ollama:11434
       EMBEDDING_MODEL: nomic-embed-text
+      GENERATION_MODEL: llama3.2:1b
     volumes:
       - private_rag_storage:/app/storage
     depends_on:
