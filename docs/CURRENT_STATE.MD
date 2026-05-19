@@ -71,6 +71,7 @@ Request example:
   "tenant_id": "demo",
   "top_k": 3
 }
+```
 
 Returns:
 

@@ -111,6 +111,7 @@ Planned endpoints:
 GET /documents
 GET /documents/{document_id}
 GET /documents/{document_id}/chunks
+```
 
 Purpose:
 
