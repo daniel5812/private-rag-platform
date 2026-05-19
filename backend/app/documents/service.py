@@ -5,6 +5,8 @@ from fastapi import UploadFile
 
 from app.core.config import settings
 from app.core.database import database
+from app.documents.chunker import chunk_text
+from app.documents.text_extractor import extract_text_from_file
 
 
 async def save_uploaded_document(
@@ -42,6 +44,32 @@ async def save_uploaded_document(
         file.content_type,
         str(storage_path),
     )
+
+    text = extract_text_from_file(
+        storage_path=str(storage_path),
+        content_type=file.content_type,
+    )
+
+    chunks = chunk_text(text)
+
+    for index, chunk in enumerate(chunks):
+        await database.execute(
+            """
+            INSERT INTO document_chunks (
+                id,
+                document_id,
+                tenant_id,
+                chunk_index,
+                content
+            )
+            VALUES ($1, $2, $3, $4, $5);
+            """,
+            uuid4(),
+            document_id,
+            tenant_id,
+            index,
+            chunk,
+        )
 
     document = dict(row)
     document["id"] = str(document["id"])
