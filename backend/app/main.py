@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.core.database import database
 from app.documents.routes import router as documents_router
+from app.rag.routes import router as rag_router
 
 
 @asynccontextmanager
@@ -20,7 +21,7 @@ app = FastAPI(
 )
 
 app.include_router(documents_router)
-
+app.include_router(rag_router)
 
 @app.get("/health")
 async def health_check():
