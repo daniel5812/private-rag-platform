@@ -22,5 +22,19 @@ class Database:
         async with self.pool.acquire() as connection:
             return await connection.fetchval(query, *args)
 
+    async def fetchrow(self, query: str, *args):
+        if self.pool is None:
+            raise RuntimeError("Database pool is not initialized")
+
+        async with self.pool.acquire() as connection:
+            return await connection.fetchrow(query, *args)
+
+    async def execute(self, query: str, *args):
+        if self.pool is None:
+            raise RuntimeError("Database pool is not initialized")
+
+        async with self.pool.acquire() as connection:
+            return await connection.execute(query, *args)
+
 
 database = Database()

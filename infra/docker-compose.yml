@@ -9,6 +9,9 @@ services:
     environment:
       APP_ENV: development
       DATABASE_URL: postgresql://rag_user:rag_password@db:5432/private_rag
+      STORAGE_DIR: /app/storage
+    volumes:
+      - private_rag_storage:/app/storage
     depends_on:
       - db
 
@@ -27,3 +30,4 @@ services:
 
 volumes:
   private_rag_pgdata:
+  private_rag_storage:
