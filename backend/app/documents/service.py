@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.database import database
 from app.documents.chunker import chunk_text
 from app.documents.text_extractor import extract_text_from_file
+from app.embeddings.ollama_client import generate_embedding
 
 
 async def save_uploaded_document(
@@ -53,6 +54,9 @@ async def save_uploaded_document(
     chunks = chunk_text(text)
 
     for index, chunk in enumerate(chunks):
+        embedding = await generate_embedding(chunk)
+        embedding_as_text = "[" + ",".join(str(value) for value in embedding) + "]"
+
         await database.execute(
             """
             INSERT INTO document_chunks (
@@ -60,15 +64,17 @@ async def save_uploaded_document(
                 document_id,
                 tenant_id,
                 chunk_index,
-                content
+                content,
+                embedding
             )
-            VALUES ($1, $2, $3, $4, $5);
+            VALUES ($1, $2, $3, $4, $5, $6::vector);
             """,
             uuid4(),
             document_id,
             tenant_id,
             index,
             chunk,
+            embedding_as_text,
         )
 
     document = dict(row)
