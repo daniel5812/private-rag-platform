@@ -1,5 +1,9 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
-
+from app.documents.text_extractor import (
+    EmptyExtractedTextError,
+    InvalidDocumentError,
+    UnsupportedFileTypeError,
+)
 from app.documents.schemas import (
     DocumentChunkResponse,
     DocumentDetail,
@@ -18,8 +22,15 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(file: UploadFile = File(...)):
-    document = await save_uploaded_document(file=file, tenant_id="demo")
-    return document
+    try:
+        document = await save_uploaded_document(file=file, tenant_id="demo")
+        return document
+    except UnsupportedFileTypeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except EmptyExtractedTextError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except InvalidDocumentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[DocumentSummary])
