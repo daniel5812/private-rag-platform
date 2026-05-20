@@ -1,9 +1,21 @@
+from app.core.config import settings
 from app.core.database import database
 from app.embeddings.ollama_client import generate_embedding
 
 
 def _embedding_to_pgvector_text(embedding: list[float]) -> str:
     return "[" + ",".join(str(value) for value in embedding) + "]"
+
+
+def filter_chunks_by_distance(
+    chunks: list[dict],
+    max_distance: float,
+) -> list[dict]:
+    return [
+        chunk
+        for chunk in chunks
+        if chunk["distance"] is not None and chunk["distance"] <= max_distance
+    ]
 
 
 async def retrieve_relevant_chunks(
@@ -33,4 +45,9 @@ async def retrieve_relevant_chunks(
         top_k,
     )
 
-    return [dict(row) for row in rows]
+    chunks = [dict(row) for row in rows]
+
+    return filter_chunks_by_distance(
+        chunks=chunks,
+        max_distance=settings.retrieval_max_distance,
+    )
