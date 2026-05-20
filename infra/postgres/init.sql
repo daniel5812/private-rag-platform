@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS documents (
     filename TEXT NOT NULL,
     content_type TEXT,
     storage_path TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'processing',
+    error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

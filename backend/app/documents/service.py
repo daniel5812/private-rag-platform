@@ -50,16 +50,20 @@ async def save_uploaded_document(
                 tenant_id,
                 filename,
                 content_type,
-                storage_path
+                storage_path,
+                status,
+                error_message
             )
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, tenant_id, filename, content_type, storage_path;
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id, tenant_id, filename, content_type, storage_path, status, error_message;
             """,
             document_id,
             tenant_id,
             original_filename,
             file.content_type,
             str(storage_path),
+            "ready",
+            None,
         )
 
         for index, chunk in enumerate(chunks):
@@ -105,6 +109,8 @@ async def list_documents(tenant_id: str = "demo") -> list[dict]:
             d.filename,
             d.content_type,
             d.storage_path,
+            d.status,
+            d.error_message,
             d.created_at::text AS created_at,
             COUNT(c.id)::int AS chunk_count,
             COUNT(c.embedding)::int AS chunks_with_embedding
@@ -118,7 +124,9 @@ async def list_documents(tenant_id: str = "demo") -> list[dict]:
             d.filename,
             d.content_type,
             d.storage_path,
-            d.created_at
+            d.created_at,
+            d.status,
+            d.error_message
         ORDER BY d.created_at DESC;
         """,
         tenant_id,
@@ -136,6 +144,8 @@ async def get_document(document_id: str, tenant_id: str = "demo") -> dict | None
             filename,
             content_type,
             storage_path,
+            status,
+            error_message,
             created_at::text AS created_at
         FROM documents
         WHERE id = $1::uuid

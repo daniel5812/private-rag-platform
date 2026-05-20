@@ -7,6 +7,8 @@ class DocumentUploadResponse(BaseModel):
     filename: str
     content_type: str | None
     storage_path: str
+    status: str
+    error_message: str | None = None
 
 
 class DocumentSummary(BaseModel):
@@ -15,6 +17,8 @@ class DocumentSummary(BaseModel):
     filename: str
     content_type: str | None
     storage_path: str
+    status: str
+    error_message: str | None = None
     created_at: str
     chunk_count: int
     chunks_with_embedding: int
@@ -26,6 +30,8 @@ class DocumentDetail(BaseModel):
     filename: str
     content_type: str | None
     storage_path: str
+    status: str
+    error_message: str | None = None
     created_at: str
 
 
