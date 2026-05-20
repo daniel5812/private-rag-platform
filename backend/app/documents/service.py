@@ -6,7 +6,11 @@ from fastapi import UploadFile
 from app.core.config import settings
 from app.core.database import database
 from app.documents.chunker import chunk_text
-from app.documents.text_extractor import extract_text_from_file
+from app.documents.text_extractor import (
+    EmptyExtractedTextError,
+    UnsupportedFileTypeError,
+    extract_text_from_file,
+)
 from app.embeddings.ollama_client import generate_embedding
 
 
@@ -28,63 +32,69 @@ async def save_uploaded_document(
 
     storage_path = tenant_storage_dir / f"{document_id}_{safe_filename}"
 
-    content = await file.read()
-    storage_path.write_bytes(content)
+    try:
+        content = await file.read()
+        storage_path.write_bytes(content)
 
-    row = await database.fetchrow(
-        """
-        INSERT INTO documents (
-            id,
-            tenant_id,
-            filename,
-            content_type,
-            storage_path
+        text = extract_text_from_file(
+            storage_path=str(storage_path),
+            content_type=file.content_type,
         )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, tenant_id, filename, content_type, storage_path;
-        """,
-        document_id,
-        tenant_id,
-        original_filename,
-        file.content_type,
-        str(storage_path),
-    )
 
-    text = extract_text_from_file(
-        storage_path=str(storage_path),
-        content_type=file.content_type,
-    )
+        chunks = chunk_text(text)
 
-    chunks = chunk_text(text)
-
-    for index, chunk in enumerate(chunks):
-        embedding = await generate_embedding(chunk)
-        embedding_as_text = _embedding_to_pgvector_text(embedding)
-
-        await database.execute(
+        row = await database.fetchrow(
             """
-            INSERT INTO document_chunks (
+            INSERT INTO documents (
                 id,
-                document_id,
                 tenant_id,
-                chunk_index,
-                content,
-                embedding
+                filename,
+                content_type,
+                storage_path
             )
-            VALUES ($1, $2, $3, $4, $5, $6::vector);
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, tenant_id, filename, content_type, storage_path;
             """,
-            uuid4(),
             document_id,
             tenant_id,
-            index,
-            chunk,
-            embedding_as_text,
+            original_filename,
+            file.content_type,
+            str(storage_path),
         )
 
-    document = dict(row)
-    document["id"] = str(document["id"])
-    return document
+        for index, chunk in enumerate(chunks):
+            embedding = await generate_embedding(chunk)
+            embedding_as_text = _embedding_to_pgvector_text(embedding)
 
+            await database.execute(
+                """
+                INSERT INTO document_chunks (
+                    id,
+                    document_id,
+                    tenant_id,
+                    chunk_index,
+                    content,
+                    embedding
+                )
+                VALUES ($1, $2, $3, $4, $5, $6::vector);
+                """,
+                uuid4(),
+                document_id,
+                tenant_id,
+                index,
+                chunk,
+                embedding_as_text,
+            )
+
+        document = dict(row)
+        document["id"] = str(document["id"])
+        return document
+
+    except Exception:
+        if storage_path.exists():
+            storage_path.unlink()
+
+        raise
 
 async def list_documents(tenant_id: str = "demo") -> list[dict]:
     rows = await database.fetch(
