@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.core.tenant import get_tenant_id
 
 from app.rag.answer_builder import build_grounded_fallback_answer
 from app.rag.answer_validator import (
@@ -14,32 +15,38 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 
 
 @router.post("/retrieve", response_model=RetrieveResponse)
-async def retrieve(request: RetrieveRequest):
+async def retrieve(
+    request: RetrieveRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     results = await retrieve_relevant_chunks(
         query=request.query,
-        tenant_id=request.tenant_id,
+        tenant_id=tenant_id,
         top_k=request.top_k,
     )
 
     return {
         "query": request.query,
-        "tenant_id": request.tenant_id,
+        "tenant_id": tenant_id,
         "results": results,
     }
 
 
 @router.post("/ask", response_model=AskResponse)
-async def ask(request: AskRequest):
+async def ask(
+    request: AskRequest,
+    tenant_id: str = Depends(get_tenant_id),
+):
     chunks = await retrieve_relevant_chunks(
         query=request.query,
-        tenant_id=request.tenant_id,
+        tenant_id=tenant_id,
         top_k=request.top_k,
     )
 
     if not chunks:
         return {
             "query": request.query,
-            "tenant_id": request.tenant_id,
+            "tenant_id": tenant_id,
             "answer": "I don't have enough information in the provided documents.",
             "sources": [],
         }
@@ -82,7 +89,7 @@ async def ask(request: AskRequest):
 
     return {
         "query": request.query,
-        "tenant_id": request.tenant_id,
+        "tenant_id": tenant_id,
         "answer": answer,
         "sources": sources,
     }
