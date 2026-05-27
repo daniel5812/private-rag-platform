@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class DocumentUploadResponse(BaseModel):
     id: str
     tenant_id: str
+    workspace_id: str | None = None
     filename: str
     content_type: str | None
     storage_path: str
@@ -14,6 +15,7 @@ class DocumentUploadResponse(BaseModel):
 class DocumentSummary(BaseModel):
     id: str
     tenant_id: str
+    workspace_id: str | None = None
     filename: str
     content_type: str | None
     storage_path: str
@@ -27,6 +29,7 @@ class DocumentSummary(BaseModel):
 class DocumentDetail(BaseModel):
     id: str
     tenant_id: str
+    workspace_id: str | None = None
     filename: str
     content_type: str | None
     storage_path: str
@@ -39,6 +42,7 @@ class DocumentChunkResponse(BaseModel):
     id: str
     document_id: str
     tenant_id: str
+    workspace_id: str | None = None
     chunk_index: int
     content: str
     has_embedding: bool
