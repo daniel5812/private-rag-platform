@@ -114,3 +114,17 @@ The system handles errors gracefully:
 - Failed uploads are cleaned up (no orphaned metadata)
 - Ingestion is atomic (metadata inserted only after chunks succeed)
 - Retrieval threshold prevents hallucination from lack of context
+
+cd ~/projects/private-rag-platform
+
+git checkout main
+git pull origin main
+git status
+
+git branch -d feature/workspace-document-upload
+git push origin --delete feature/workspace-document-upload
+
+git checkout -b feature/workspace-rag
+
+git branch
+git status
