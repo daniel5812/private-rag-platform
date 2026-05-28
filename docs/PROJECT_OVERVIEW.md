@@ -100,3 +100,5 @@ Every document and chunk carries both `tenant_id` and `workspace_id`. Retrieval 
 - S3 for private document storage
 - Secrets Manager for credentials
 - CloudWatch for logging and monitoring
+
+git push origin --delete <BRANCH>
