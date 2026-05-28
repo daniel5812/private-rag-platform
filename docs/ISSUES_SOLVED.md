@@ -175,7 +175,7 @@ return document
 
 ### Problem
 
-POST /rag/retrieve returned:
+`POST /rag/retrieve` returned:
 
 ```json
 {
@@ -185,7 +185,7 @@ POST /rag/retrieve returned:
 
 ### Cause
 
-The document_chunks table was empty. The database volume had likely been reset during development.
+The `document_chunks` table was empty. The database volume had likely been reset during development.
 
 ### Solution
 
@@ -278,10 +278,10 @@ Improved the prompt and added basic answer validation.
 
 Implemented:
 
-- citation validation
-- allowed source ID checking
-- suspicious phrase detection
-- grounded fallback answer generation
+- Citation validation
+- Allowed source ID checking
+- Suspicious phrase detection
+- Grounded fallback answer generation
 
 This changed the answer from an unsupported definition to a safer grounded answer:
 
@@ -375,7 +375,7 @@ COPY tests/ /app/tests/
 ENV PYTHONPATH=/app
 ```
 
-Now pytest collects and runs all tests successfully (15 tests passing).
+Now pytest collects and runs all tests successfully.
 
 ## 14. Retrieval Threshold Too Permissive
 
@@ -401,3 +401,31 @@ The threshold was tuned empirically on the current dataset:
 - vacation policy query (distance 0.3779) → filtered, returns empty (no relevant chunks)
 
 **Note:** This is a heuristic threshold and should be evaluated on a proper test dataset with labeled relevance in future iterations. The threshold is configurable via environment variable for different deployments.
+
+## 15. Workspace RAG Isolation
+
+### Risk
+
+The system supports multiple workspaces per tenant. Without explicit workspace filtering in retrieval, a query inside Workspace A could return chunks that belong to Workspace B — mixing unrelated document sets and producing incorrect, misleading answers.
+
+### Root Cause
+
+Early retrieval only filtered by `tenant_id`. When workspaces were introduced, retrieval needed to also filter by `workspace_id` to maintain isolation between workspaces within the same tenant.
+
+### Solution
+
+Three layers work together to enforce workspace isolation:
+
+**1. Schema:** `workspace_id` is stored on both `documents` and `document_chunks`. Every chunk is associated with exactly one workspace at write time.
+
+**2. Route validation:** Every workspace-scoped route calls `require_workspace(workspace_id, tenant_id)` before any data access. This confirms the workspace exists and belongs to the requesting tenant. Requests for a workspace that belongs to a different tenant are rejected before reaching retrieval.
+
+**3. Retrieval SQL:** The `document_chunks` query in workspace-scoped RAG filters by both `tenant_id AND workspace_id`. Chunks from other workspaces are never returned, even if they are semantically similar.
+
+**4. Tests:** Route tests verify that `workspace_id` is passed into the RAG service and that retrieval calls include the workspace filter. This prevents the isolation from being accidentally removed in a refactor.
+
+### Clarification: Citation Validation Is Not a Security Boundary
+
+`answer_uses_only_allowed_sources` checks that the LLM cites only source IDs that were included in the retrieved context. This is a hallucination guardrail — it prevents the model from fabricating or misattributing sources.
+
+It does not enforce tenant or workspace access. By the time citation validation runs, retrieval has already been filtered by `tenant_id` and `workspace_id` at the SQL layer. The two mechanisms serve different purposes and should not be confused.

@@ -1,130 +1,102 @@
 # Private RAG Platform — Project Overview
 
-## Project Description
+## Product Vision
 
-Private RAG Platform is a secure, enterprise-style Retrieval-Augmented Generation system for asking questions over private internal documents.
+Private RAG Platform is a secure, local-first Retrieval-Augmented Generation system for asking questions over private internal documents.
 
-The goal of the project is to build a local-first RAG platform that can later be deployed inside an AWS private cloud environment. The system is designed for organizations that want to use AI over sensitive internal data while keeping documents, embeddings, retrieval, and generation under their own control.
+The goal is to give organizations an AI knowledge system where documents, embeddings, retrieval, and generation stay entirely under their own control — no external APIs, no data leaving the environment. The platform is built locally first with Docker Compose and is designed to move into an AWS private cloud deployment later.
 
-This project is built as a learning and portfolio project, with emphasis on backend architecture, data flow, infrastructure, security thinking, and production-oriented design.
+This project is built as a learning and portfolio project, with emphasis on backend architecture, data isolation, RAG pipeline design, and production-oriented thinking.
 
-## Core Idea
+## Core Abstraction: Workspaces
 
-The system follows a standard RAG pipeline:
+The central user-facing concept is the **workspace** (also called a notebook).
+
+```text
+Tenant
+→ Workspace
+→ Documents
+→ Chunks + Embeddings
+→ Workspace-scoped Retrieval
+→ Grounded Answer with Citations
+```
+
+A tenant represents an organization. A workspace is a scoped knowledge context within that tenant — for example "Q1 Reports", "HR Policies", or "Engineering Docs". Documents are uploaded into a workspace, and retrieval is always filtered to that workspace.
+
+**Domain-specific behavior (finance, legal, HR, engineering) is a future workspace profile feature — it is not hardcoded into the core architecture.** The RAG engine stays generic; workspace profiles will influence prompt style and answer behavior only.
+
+## RAG Pipeline
 
 ```text
 Upload document (.txt or .pdf)
 → Extract and validate text
 → Split text into chunks
-→ Generate embeddings via Ollama
+→ Generate embeddings via Ollama (nomic-embed-text)
 → Store chunks and vectors in PostgreSQL with pgvector
-→ User asks a question
-→ Embed query and retrieve similar chunks
-→ Filter chunks by relevance distance (max distance threshold)
-→ Generate grounded answer using local LLM
-→ Validate answer against retrieved context
-→ Return answer with source citations
+→ User asks a question in a workspace
+→ Embed query
+→ Retrieve similar chunks filtered by tenant_id + workspace_id
+→ Filter chunks by relevance distance (RETRIEVAL_MAX_DISTANCE)
+→ Build prompt with retrieved context
+→ Generate answer using local LLM (llama3.2:1b via Ollama)
+→ Validate answer (citations, suspicious phrases, fallback)
+→ Return grounded answer with source citations
 ```
 
-**Core principle**: The database and retrieved chunks are the source of truth. The LLM is used only to synthesize retrieved context, not to generate facts.
+**Core principle:** The retrieved chunks are the source of truth. The LLM synthesizes context; it does not invent facts.
 
-## Main Goals
+## Security Boundaries
 
-- Allow users to upload private documents (text and PDF).
-- Store document metadata in PostgreSQL.
-- Extract, chunk, and embed documents locally.
-- Store document chunks and embeddings using pgvector.
-- Use local/private embeddings and LLM through Ollama.
-- Retrieve relevant chunks based on semantic similarity.
-- Generate answers grounded in retrieved document context.
-- Include citations for every answer source.
-- Filter out low-relevance retrievals to prevent hallucination.
-- Prevent cross-tenant data leakage.
-- Build toward a future AWS private cloud deployment.
+| Boundary | Mechanism |
+|---|---|
+| Tenant isolation | `tenant_id` column on all tables; all queries filter by tenant |
+| Workspace isolation | `workspace_id` column on documents and chunks; workspace routes filter by workspace |
+| Ownership validation | `require_workspace(workspace_id, tenant_id)` called before every workspace operation |
+| Retrieval SQL | `document_chunks` filtered by `tenant_id` AND `workspace_id` in every workspace-scoped query |
+| Citation validation | `answer_uses_only_allowed_sources` checks that the LLM cites only source IDs from retrieved context — this is a hallucination guardrail, not a security boundary |
 
-## Current Technology Stack
-
-**Backend**
-- Python 3.10+
-- FastAPI (async web framework)
-- Pydantic (data validation)
-- asyncpg (async PostgreSQL driver)
-- httpx (async HTTP client for Ollama)
-- pypdf (PDF text extraction)
-
-**Database**
-- PostgreSQL 15+
-- pgvector extension (vector similarity search)
-
-**AI / ML Runtime**
-- Ollama (local model serving)
-- `nomic-embed-text` (text embeddings)
-- `llama3.2:1b` (local answer generation)
-
-**Infrastructure**
-- Docker & Docker Compose (local containerization)
-- Ubuntu 22.04 VM (local development)
-- VMware (hypervisor for local VM)
-
-## Future Cloud Target
-
-**AWS Architecture**
-- VPC with public and private subnets
-- EC2 or ECS for FastAPI backend
-- RDS PostgreSQL with pgvector extension
-- S3 for private document storage
-- Secrets Manager for credentials
-- CloudWatch for logging
-- Optional: Bedrock or self-hosted GPU instances for embeddings
+**Important:** `X-Tenant-ID` is a development-only tenant mechanism. It is not production authentication. In production, tenant identity must come from a trusted authentication token (JWT or OAuth claims).
 
 ## Design Principles
 
-**1. Data First, LLM Second**
+**Data First, LLM Second**
+Retrieval happens before generation. The LLM reasons over retrieved context only and should not draw on general knowledge.
 
-The system retrieves relevant data before asking the LLM to answer. The LLM only reasons over retrieved context and should not invent facts. Retrieved context is always the source of truth, not the model's general knowledge.
+**Local-First Development**
+The entire stack runs in Docker Compose with no external services or API keys. This enables rapid iteration and keeps the architecture portable to AWS later.
 
-**2. Local-First Development**
+**Private by Design**
+No data leaves the controlled environment. Documents, embeddings, and generated answers all stay inside the deployment boundary.
 
-The MVP is built locally first using Docker Compose. This makes development easier, enables rapid iteration, and prepares the architecture for future AWS deployment. Developers should not require external services or API keys to build and test locally.
+**Grounded Answers with Citations**
+Every answer includes source citations (e.g. `[D1]`, `[D2]`). Users and auditors can verify every claim against the source document.
 
-**3. Private by Design**
+**Guardrails Beyond Prompting**
+The system validates answers after generation:
+- Citation presence check
+- Allowed source ID check (cites only retrieved sources)
+- Suspicious phrase detection
+- Grounded fallback answer when validation fails
+- Distance-based retrieval filtering to avoid returning irrelevant chunks
 
-Documents, embeddings, and generated answers remain inside the controlled environment. No data is sent to external APIs or third-party services. The system is designed to be deployed behind a VPC in AWS with no public access.
+**Tenant and Workspace Isolation**
+Every document and chunk carries both `tenant_id` and `workspace_id`. Retrieval is always filtered by both. Workspace ownership is validated at the route level before any data access.
 
-**4. Tenant-Aware Architecture**
+## Technology Stack
 
-Every document and chunk is stored with a `tenant_id`. This enables multi-tenant deployment and prevents cross-tenant data leakage. The current MVP uses a hardcoded tenant (`demo`), but future versions should derive tenant identity from authentication tokens.
+**Backend:** Python 3.10+, FastAPI, Pydantic, asyncpg, httpx, pypdf
 
-**5. Grounded Answers with Source Citations**
+**Database:** PostgreSQL 15+ with pgvector extension
 
-Every generated answer is based on retrieved chunks and includes source citations (e.g., `[D1]`, `[D2]`). Users and auditors should be able to verify every claim by reading the source document.
+**AI / ML:** Ollama (`nomic-embed-text` for embeddings, `llama3.2:1b` for generation)
 
-**6. Guardrails Beyond Prompting**
+**Infrastructure:** Docker Compose, Ubuntu VM
 
-Prompting alone is not enough to prevent hallucinations. The system includes validation logic to:
-- Check that answers cite their sources
-- Detect unsupported or suspicious phrases not in context
-- Replace unsafe answers with grounded fallback responses
-- Filter retrievals by relevance distance to avoid "best of bad options"
+## Future AWS Target
 
-**7. Reliability & Robustness**
-
-The system handles errors gracefully:
-- Empty or malformed PDFs return clear error messages
-- Failed uploads are cleaned up (no orphaned metadata)
-- Ingestion is atomic (metadata inserted only after chunks succeed)
-- Retrieval threshold prevents hallucination from lack of context
-
-cd ~/projects/private-rag-platform
-
-git checkout main
-git pull origin main
-git status
-
-git branch -d feature/workspace-document-upload
-git push origin --delete feature/workspace-document-upload
-
-git checkout -b feature/workspace-rag
-
-git branch
-git status
+- VPC with public and private subnets
+- EC2 or ECS for FastAPI backend
+- RDS PostgreSQL with pgvector
+- S3 for private document storage
+- Secrets Manager for credentials
+- CloudWatch for logging and monitoring

@@ -1,400 +1,228 @@
----
-
-# `docs/CURRENT_STATE.md`
-
-```md
 # Current State
 
 ## Project Status
 
-The project currently has a working local MVP of a private, tenant-aware RAG pipeline.
+The project has a working local MVP of a private, multi-tenant, workspace-scoped RAG pipeline.
 
-The system can upload text and PDF documents, extract and chunk text, generate embeddings locally, store vectors in PostgreSQL with pgvector, retrieve relevant chunks, and generate grounded answers with source citations.
-
-The project direction has evolved from a simple private document RAG system into a more general Private RAG Platform.
-
-The next major architecture step is to introduce a workspace/notebook layer.
-
-Current structure:
+The implemented architecture is:
 
 ```text
 Tenant
+→ Workspace
 → Documents
-→ Chunks
-→ Embeddings
-→ Retrieval
-→ Grounded Answer
+→ Chunks + Embeddings
+→ Workspace-scoped Retrieval
+→ Grounded Answer with Citations
+```
 
-Target structure:
+## Completed Work
 
-Tenant
-→ Workspace / Notebook
-→ Documents
-→ Chunks
-→ Embeddings
-→ Retrieval
-→ Workspace-aware Grounded Answer
-Strategic Direction
+- Dockerized FastAPI backend (API, PostgreSQL, Ollama services)
+- PostgreSQL + pgvector for vector storage and similarity search
+- Document upload: text extraction, chunking, embedding, storage
+- Tenant context via `X-Tenant-ID` header and `get_tenant_id` dependency
+- Workspace CRUD endpoints
+- Workspace-scoped document upload and document listing
+- Workspace-scoped retrieval and answer generation
+- Shared RAG logic refactored into `app/rag/service.py`
+- Legacy tenant-level RAG endpoints preserved for development/debug
+- Tests covering: tenant handling, retrieval distance filtering, workspace-aware retrieval, workspace RAG routes, answer builder/validator, text extraction, chunking
 
-The project should remain domain-agnostic.
+## Current API Endpoints
 
-It should not be hardcoded as a finance system, legal system, HR system, or engineering system.
+Tenant context is required on every request via `X-Tenant-ID: <tenant>`.
 
-Instead, the platform should support multiple use cases through workspace profiles.
+### Health
 
-Examples:
+```
+GET  /health
+GET  /health/db
+```
 
-Finance reports
-HR policies
-Legal contracts
-Engineering documentation
-Academic papers
-Internal company policies
+### Workspaces
 
-The future workspace model should support a hybrid approach:
+```
+POST   /workspaces
+GET    /workspaces
+GET    /workspaces/{workspace_id}
+PATCH  /workspaces/{workspace_id}
+DELETE /workspaces/{workspace_id}
+```
 
-Automatic domain/context inference + user override
+### Workspace Documents
 
-For example:
+```
+POST  /workspaces/{workspace_id}/documents/upload
+GET   /workspaces/{workspace_id}/documents
+```
 
-User creates a notebook called "Q1 Reports"
-→ Uploads financial reports
-→ System detects finance/reporting context
-→ User can accept or override the workspace profile
+Example upload:
 
-This allows the core RAG architecture to stay generic while still providing domain-aware behavior.
+```bash
+curl -X POST "http://localhost:8000/workspaces/{workspace_id}/documents/upload" \
+  -H "X-Tenant-ID: demo" \
+  -F "file=@report.pdf"
+```
 
-Current Capabilities
+### Workspace RAG
 
-The system can:
+```
+POST  /workspaces/{workspace_id}/rag/retrieve
+POST  /workspaces/{workspace_id}/rag/ask
+```
 
-Run a FastAPI backend inside Docker.
-Run PostgreSQL with pgvector inside Docker.
-Run Ollama inside Docker.
-Upload .txt and .pdf documents.
-Store document metadata in PostgreSQL.
-Store uploaded files in local Docker storage.
-Extract text from .txt and .pdf files.
-Handle empty or invalid PDFs with clean error responses.
-Clean up failed uploads.
-Split extracted text into chunks with overlap.
-Generate embeddings using Ollama and nomic-embed-text.
-Store chunk embeddings in PostgreSQL using pgvector.
-Retrieve semantically relevant chunks with distance-based filtering.
-Generate grounded answers using a local LLM.
-Return citations and retrieved source chunks.
-Apply answer validation to reduce hallucinations.
-List documents, view document details, and inspect chunks through API endpoints.
-Track document status.
-Use request-level tenant context through X-Tenant-ID.
-Current Technology Stack
-Backend
-Python
-FastAPI
-Pydantic
-asyncpg
-httpx
-pypdf
-Database
-PostgreSQL
-pgvector
-AI / ML Runtime
-Ollama
-nomic-embed-text
-llama3.2:1b
-Infrastructure
-Docker
-Docker Compose
-Ubuntu VM
-VMware local development environment
-Current Docker Services
+Example:
 
-The system uses Docker Compose with the following services:
+```bash
+curl -X POST "http://localhost:8000/workspaces/{workspace_id}/rag/ask" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: demo" \
+  -d '{"query": "What is the access control policy?", "top_k": 3}'
+```
 
-api
+### Legacy Tenant-Level Endpoints
 
-FastAPI backend.
-
-Default local URL:
-
-http://localhost:8000
-db
-
-PostgreSQL database with pgvector extension.
-
-ollama
-
-Local Ollama runtime used for embeddings and answer generation.
-
-Current Models
-Embedding Model
-nomic-embed-text
-
-Used to convert document chunks and user queries into vectors.
-
-Generation Model
-llama3.2:1b
-
-Used to generate local answers from retrieved context.
-
-Current API Endpoints
-GET /health
-
-Returns basic service status.
-
-GET /health/db
-
-Checks that the FastAPI backend can connect to PostgreSQL.
-
-Document Endpoints
+```
 POST /documents/upload
-
-Uploads a document and stores:
-
-document metadata
-original file
-extracted text chunks
-embeddings for each chunk
-
-Supported file types:
-
-.txt
-.pdf
-
-Example:
-
-curl -i -X POST "http://localhost:8000/documents/upload" \
-  -H "X-Tenant-ID: demo" \
-  -F "file=@sample.txt"
-GET /documents
-
-Returns metadata for all tenant-filtered documents.
-
-GET /documents/{document_id}
-
-Returns metadata for a specific document.
-
-GET /documents/{document_id}/chunks
-
-Returns extracted chunks for a document.
-
-RAG Endpoints
+GET  /documents
+GET  /documents/{document_id}
+GET  /documents/{document_id}/chunks
 POST /rag/retrieve
-
-Retrieves the most relevant document chunks based on vector similarity.
-
-Example:
-
-curl -i -X POST "http://localhost:8000/rag/retrieve" \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: demo" \
-  -d '{"query":"What does the document say about access control?","top_k":3}'
 POST /rag/ask
+```
 
-Generates a grounded answer based on retrieved context.
+These remain active for debugging and backward compatibility. Workspace-scoped endpoints are the primary product API.
 
-Example:
+## Document Upload Flow
 
-curl -i -X POST "http://localhost:8000/rag/ask" \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: demo" \
-  -d '{"query":"What does the document say about access control?","top_k":3}'
+```text
+User uploads file into a workspace
+→ API reads tenant_id from X-Tenant-ID
+→ API validates workspace ownership (require_workspace)
+→ Text is extracted from .txt or .pdf
+→ Text is split into overlapping chunks
+→ Each chunk is embedded via Ollama (nomic-embed-text)
+→ Chunks stored in document_chunks with tenant_id + workspace_id
+→ Document metadata inserted into documents table
+→ Document status returned
+```
 
-Example answer:
+## Question Answering Flow
 
-The document mentions access control in relation to internal company policy, permissions, secure document retrieval, and employee access management. [D1]
-Tenant Context
+```text
+User asks a question in a workspace
+→ API reads tenant_id from X-Tenant-ID
+→ API validates workspace ownership (require_workspace)
+→ Query is embedded via Ollama
+→ pgvector retrieves similar chunks filtered by tenant_id + workspace_id
+→ Chunks filtered by distance threshold (RETRIEVAL_MAX_DISTANCE = 0.32)
+→ Prompt is built from retrieved context
+→ Ollama LLM generates answer (llama3.2:1b)
+→ Answer validator checks citations and suspicious phrases
+→ Unsafe answers replaced with grounded fallback
+→ API returns grounded answer and source citations
+```
 
-The MVP now uses request-level tenant context.
+## Database Tables
 
-Current transitional mechanism:
+### documents
 
-X-Tenant-ID: demo
+| Field | Notes |
+|---|---|
+| id | UUID |
+| tenant_id | organization isolation |
+| workspace_id | workspace isolation |
+| filename | original upload filename |
+| content_type | txt or pdf |
+| storage_path | local file path |
+| status | processing / ready / failed |
+| error_message | set on failure |
+| created_at | |
 
-This allows the API to filter documents and retrieval by tenant.
+### document_chunks
 
-Current behavior:
+| Field | Notes |
+|---|---|
+| id | UUID |
+| document_id | FK to documents |
+| tenant_id | denormalized for query performance |
+| workspace_id | denormalized for query performance |
+| chunk_index | position in document |
+| content | raw chunk text |
+| embedding | pgvector column |
+| created_at | |
 
-Request with X-Tenant-ID: demo
-→ searches only demo documents
+### workspaces
 
-Request with X-Tenant-ID: other-tenant
-→ does not see demo documents
+| Field | Notes |
+|---|---|
+| id | UUID |
+| tenant_id | owner organization |
+| name | user-defined workspace name |
+| description | optional |
+| created_at | |
+| updated_at | |
 
-Important:
+## Technology Stack
 
-X-Tenant-ID is not production authentication.
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.10+, FastAPI, Pydantic, asyncpg, httpx, pypdf |
+| Database | PostgreSQL 15+, pgvector |
+| Embeddings / LLM | Ollama, nomic-embed-text, llama3.2:1b |
+| Infrastructure | Docker Compose, Ubuntu VM |
 
-In production, tenant identity should come from a trusted authentication mechanism such as JWT or OAuth claims.
+## Retrieval Distance Threshold
 
-Current Database Tables
-documents
+Chunks above the distance threshold are filtered before reaching the answer generation stage.
 
-Stores uploaded document metadata.
-
-Important fields:
-
-id
-tenant_id
-filename
-content_type
-storage_path
-status
-error_message
-created_at
-document_chunks
-
-Stores extracted document chunks and embeddings.
-
-Important fields:
-
-id
-document_id
-tenant_id
-chunk_index
-content
-embedding
-created_at
-Current Working Flow
-Document Upload Flow
-User uploads document
-→ API reads tenant context
-→ FastAPI saves file
-→ Text is extracted from txt/pdf
-→ Text is split into chunks
-→ Each chunk is embedded using Ollama
-→ Chunk + vector are stored in document_chunks
-→ Document metadata is inserted into documents table
-→ Document status is returned
-Question Answering Flow
-User asks a question
-→ API reads tenant context
-→ Query is embedded using Ollama
-→ PostgreSQL pgvector retrieves similar chunks for that tenant
-→ Chunks are filtered by distance threshold
-→ Prompt is built with retrieved context
-→ Ollama LLM generates answer
-→ Answer validator checks citations and suspicious hallucinations
-→ Unsafe answers are replaced with grounded fallback answer
-→ API returns grounded answer and sources
-Retrieval Distance Threshold
-
-The system uses a distance threshold to avoid returning irrelevant chunks.
-
-Current value:
-
+```
 RETRIEVAL_MAX_DISTANCE = 0.32
+```
 
-Purpose:
+This prevents the system from returning the "closest bad chunk" when no relevant context exists. The threshold is a heuristic and should be evaluated against a labeled retrieval dataset.
 
-Prevent the system from returning the closest irrelevant chunk when no useful context exists.
+## Answer Validation
 
-Example:
+After LLM generation, the system validates the answer:
 
-Relevant query:
-access control
-→ distance around 0.26
-→ accepted
+- Answer includes citations
+- Answer cites only source IDs that were in the retrieved context
+- Answer avoids known suspicious hallucination phrases
+- Unsafe answers are replaced with a grounded fallback
 
-Irrelevant query:
-vacation policy
-→ distance around 0.37
-→ filtered out
+The citation check (`answer_uses_only_allowed_sources`) is a hallucination guardrail — it is not the tenant or workspace security boundary. Access control happens at the SQL layer before retrieval.
 
-This threshold is currently a heuristic and should be evaluated with a real labeled retrieval dataset later.
+## Current Tests
 
-Answer Grounding and Validation
+Test coverage includes:
 
-The system includes basic guardrails to reduce hallucinations.
-
-Current validation checks:
-
-Answer includes citations.
-Answer uses only allowed source IDs.
-Answer avoids known suspicious unsupported phrases.
-Unsafe answers are replaced with grounded fallback responses.
-
-Example grounded fallback:
-
-The document mentions access control in relation to internal company policy, permissions, secure document retrieval, and employee access management. [D1]
-
-This is intentionally conservative.
-
-The retrieved chunks remain the source of truth.
-
-Document Status
-
-Documents include status fields.
-
-Supported statuses:
-
-processing
-ready
-failed
-
-Current synchronous upload flow normally returns:
-
-ready
-
-Future background ingestion will use:
-
-processing → ready
-processing → failed
-Current Tests
-
-Current test coverage includes:
-
-Chunking tests
-Text extraction tests
-PDF error handling tests
-Answer validator tests
-Grounded fallback answer tests
-Retrieval distance filter tests
-Tenant normalization tests
+- Tenant handling and normalization
+- Retrieval distance filtering
+- Workspace-aware retrieval filtering
+- Workspace RAG route behavior
+- Answer builder and validator logic
+- Text extraction (.txt and .pdf)
+- PDF error handling
+- Chunking
 
 Run tests:
 
+```bash
 docker compose -f infra/docker-compose.yml run --rm api pytest tests -v
+```
 
-Latest expected result:
+## Current Limitations
 
-18+ tests passing
-
-The exact number may change as new tests are added.
-
-Current Limitations
-No workspace/notebook layer yet.
-Retrieval is tenant-filtered but not workspace-filtered.
-No real authentication yet.
-X-Tenant-ID is a development-time tenant mechanism.
-No user model yet.
-No workspace-level permissions yet.
-No frontend yet.
-No migration framework yet.
-Database schema is still initialized mainly through init.sql.
-No background job system yet.
-No page-level PDF citations yet.
-No OCR support for scanned PDFs.
-Answer validation is still rule-based.
-Retrieval threshold is heuristic.
-Immediate Next Step
-
-The recommended next major implementation step is the Workspace / Notebook Layer.
-
-Goal:
-
-Tenant
-→ Workspace / Notebook
-→ Documents
-→ Chunks
-
-This step should add:
-
-workspaces table
-workspace_id on documents
-Workspace CRUD endpoints
-Workspace-scoped document upload
-Workspace-scoped retrieval
-Workspace-scoped answer generation
-
-After that, the system can support domain inference and user-overridable workspace profiles.
+- No real authentication or JWT yet — `X-Tenant-ID` is a development-only header
+- No user model or user-to-tenant membership
+- Ingestion is synchronous — large uploads block the request
+- No workspace profile or domain inference yet
+- No frontend yet
+- No workspace document detail or chunk inspection endpoints yet
+- No background job system yet
+- No page-level PDF citations
+- No OCR for scanned PDFs
+- Answer validation is rule-based (heuristic)
+- No production AWS deployment yet
+- Database schema managed via `init.sql` — no migration framework yet
