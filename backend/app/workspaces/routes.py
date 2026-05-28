@@ -1,8 +1,18 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 
 from app.core.tenant import get_tenant_id
-from app.documents.schemas import DocumentSummary, DocumentUploadResponse
-from app.documents.service import list_documents, save_uploaded_document
+from app.documents.schemas import (
+    DocumentChunkResponse,
+    DocumentDetail,
+    DocumentSummary,
+    DocumentUploadResponse,
+)
+from app.documents.service import (
+    get_document,
+    get_document_chunks,
+    list_documents,
+    save_uploaded_document,
+)
 from app.documents.text_extractor import (
     EmptyExtractedTextError,
     InvalidDocumentError,
@@ -194,5 +204,60 @@ async def ask_workspace_route(
         query=request.query,
         tenant_id=tenant_id,
         top_k=request.top_k,
+        workspace_id=workspace_id,
+    )
+
+@router.get(
+    "/{workspace_id}/documents/{document_id}",
+    response_model=DocumentDetail,
+)
+async def get_workspace_document_route(
+    workspace_id: str,
+    document_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+):
+    await require_workspace(
+        workspace_id=workspace_id,
+        tenant_id=tenant_id,
+    )
+
+    document = await get_document(
+        document_id=document_id,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+    )
+
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return document
+
+
+@router.get(
+    "/{workspace_id}/documents/{document_id}/chunks",
+    response_model=list[DocumentChunkResponse],
+)
+async def get_workspace_document_chunks_route(
+    workspace_id: str,
+    document_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+):
+    await require_workspace(
+        workspace_id=workspace_id,
+        tenant_id=tenant_id,
+    )
+
+    document = await get_document(
+        document_id=document_id,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+    )
+
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return await get_document_chunks(
+        document_id=document_id,
+        tenant_id=tenant_id,
         workspace_id=workspace_id,
     )

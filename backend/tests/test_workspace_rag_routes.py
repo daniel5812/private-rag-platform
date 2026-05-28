@@ -229,3 +229,188 @@ def test_workspace_rag_route_returns_404_when_workspace_not_found(monkeypatch):
     assert response.json() == {
         "detail": "Workspace not found",
     }
+
+def test_workspace_document_detail_route_passes_workspace_id(monkeypatch):
+    captured = {}
+
+    async def fake_require_workspace(*, workspace_id: str, tenant_id: str):
+        captured["require_workspace"] = {
+            "workspace_id": workspace_id,
+            "tenant_id": tenant_id,
+        }
+        return {
+            "id": workspace_id,
+            "tenant_id": tenant_id,
+            "name": "Test Workspace",
+            "description": None,
+            "created_at": "now",
+            "updated_at": "now",
+        }
+
+    async def fake_get_document(
+        document_id: str,
+        tenant_id: str = "demo",
+        workspace_id: str | None = None,
+    ):
+        captured["get_document"] = {
+            "document_id": document_id,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+        }
+
+        return {
+            "id": document_id,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+            "filename": "test.txt",
+            "content_type": "text/plain",
+            "storage_path": "/app/storage/demo/workspace/test.txt",
+            "status": "ready",
+            "error_message": None,
+            "created_at": "now",
+        }
+
+    monkeypatch.setattr(workspace_routes, "require_workspace", fake_require_workspace)
+    monkeypatch.setattr(workspace_routes, "get_document", fake_get_document)
+
+    app.dependency_overrides[get_tenant_id] = override_tenant_demo
+
+    try:
+        response = client.get(
+            "/workspaces/11111111-1111-1111-1111-111111111111/documents/22222222-2222-2222-2222-222222222222"
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": "demo",
+        "workspace_id": "11111111-1111-1111-1111-111111111111",
+        "filename": "test.txt",
+        "content_type": "text/plain",
+        "storage_path": "/app/storage/demo/workspace/test.txt",
+        "status": "ready",
+        "error_message": None,
+        "created_at": "now",
+    }
+
+    assert captured["require_workspace"] == {
+        "workspace_id": "11111111-1111-1111-1111-111111111111",
+        "tenant_id": "demo",
+    }
+
+    assert captured["get_document"] == {
+        "document_id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": "demo",
+        "workspace_id": "11111111-1111-1111-1111-111111111111",
+    }
+
+
+def test_workspace_document_chunks_route_passes_workspace_id(monkeypatch):
+    captured = {}
+
+    async def fake_require_workspace(*, workspace_id: str, tenant_id: str):
+        captured["require_workspace"] = {
+            "workspace_id": workspace_id,
+            "tenant_id": tenant_id,
+        }
+        return {
+            "id": workspace_id,
+            "tenant_id": tenant_id,
+            "name": "Test Workspace",
+            "description": None,
+            "created_at": "now",
+            "updated_at": "now",
+        }
+
+    async def fake_get_document(
+        document_id: str,
+        tenant_id: str = "demo",
+        workspace_id: str | None = None,
+    ):
+        captured["get_document"] = {
+            "document_id": document_id,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+        }
+
+        return {
+            "id": document_id,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+            "filename": "test.txt",
+            "content_type": "text/plain",
+            "storage_path": "/app/storage/demo/workspace/test.txt",
+            "status": "ready",
+            "error_message": None,
+            "created_at": "now",
+        }
+
+    async def fake_get_document_chunks(
+        document_id: str,
+        tenant_id: str = "demo",
+        workspace_id: str | None = None,
+    ):
+        captured["get_document_chunks"] = {
+            "document_id": document_id,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+        }
+
+        return [
+            {
+                "id": "chunk-1",
+                "document_id": document_id,
+                "tenant_id": tenant_id,
+                "workspace_id": workspace_id,
+                "chunk_index": 0,
+                "content": "Chunk content",
+                "has_embedding": True,
+                "created_at": "now",
+            }
+        ]
+
+    monkeypatch.setattr(workspace_routes, "require_workspace", fake_require_workspace)
+    monkeypatch.setattr(workspace_routes, "get_document", fake_get_document)
+    monkeypatch.setattr(workspace_routes, "get_document_chunks", fake_get_document_chunks)
+
+    app.dependency_overrides[get_tenant_id] = override_tenant_demo
+
+    try:
+        response = client.get(
+            "/workspaces/11111111-1111-1111-1111-111111111111/documents/22222222-2222-2222-2222-222222222222/chunks"
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "chunk-1",
+            "document_id": "22222222-2222-2222-2222-222222222222",
+            "tenant_id": "demo",
+            "workspace_id": "11111111-1111-1111-1111-111111111111",
+            "chunk_index": 0,
+            "content": "Chunk content",
+            "has_embedding": True,
+            "created_at": "now",
+        }
+    ]
+
+    assert captured["require_workspace"] == {
+        "workspace_id": "11111111-1111-1111-1111-111111111111",
+        "tenant_id": "demo",
+    }
+
+    assert captured["get_document"] == {
+        "document_id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": "demo",
+        "workspace_id": "11111111-1111-1111-1111-111111111111",
+    }
+
+    assert captured["get_document_chunks"] == {
+        "document_id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": "demo",
+        "workspace_id": "11111111-1111-1111-1111-111111111111",
+    }
