@@ -167,6 +167,8 @@ Tenant
 - Tenant normalization tests
 - Workspace-aware retrieval filtering tests
 - Workspace RAG route tests
+- JWT resolution tests (valid token, expired, wrong secret, missing claim)
+- AUTH_DEV_MODE behavior tests
 
 **Planned:**
 - Integration tests with real PostgreSQL
@@ -175,6 +177,25 @@ Tenant
 - Retrieval threshold evaluation dataset
 - Domain inference tests (future)
 - Performance benchmarks
+
+---
+
+## Phase 11 — JWT Tenant Resolution + Auth Hardening
+
+**Status: Completed**
+
+- Added `PyJWT` dependency
+- Added `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `AUTH_DEV_MODE` config fields
+- Docker Compose API service loads backend environment via `env_file`
+- `get_tenant_id` now validates `Authorization: Bearer <JWT>` when present
+- `tenant_id` extracted from JWT payload; JWT always wins over `X-Tenant-ID`
+- Invalid/expired JWT returns 401; missing `tenant_id` claim returns 401
+- Bearer token with unconfigured `JWT_SECRET_KEY` returns 401
+- `AUTH_DEV_MODE=true` allows `X-Tenant-ID` fallback for local development
+- `AUTH_DEV_MODE=false` requires valid JWT — no header fallback
+- Workspace/document/RAG filtering unchanged
+
+**Not yet implemented:** OAuth login, users table, internal JWT issuing, tenant membership model.
 
 ---
 
@@ -187,13 +208,16 @@ Tenant
 
 These are missing from the workspace-scoped API and needed for a complete document inspection flow.
 
-### Authentication / JWT Tenant Resolution
+### Authentication — Remaining Steps
 
-Replace `X-Tenant-ID` with a real authentication layer:
-- JWT or OAuth token validation
-- Tenant derived from token claims
-- User-to-tenant membership model
-- Remove free-form tenant header from production paths
+JWT groundwork is in place (Phase 11). Remaining work:
+
+- Local dev helper/script for generating JWT tokens manually
+- User model and user-to-tenant membership
+- OAuth login flow
+- Internal JWT issuing after OAuth login
+- Further restrict or remove `X-Tenant-ID` fallback
+- RBAC / admin role enforcement (future)
 
 ### Async / Background Ingestion
 

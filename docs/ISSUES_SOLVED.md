@@ -429,3 +429,31 @@ Three layers work together to enforce workspace isolation:
 `answer_uses_only_allowed_sources` checks that the LLM cites only source IDs that were included in the retrieved context. This is a hallucination guardrail — it prevents the model from fabricating or misattributing sources.
 
 It does not enforce tenant or workspace access. By the time citation validation runs, retrieval has already been filtered by `tenant_id` and `workspace_id` at the SQL layer. The two mechanisms serve different purposes and should not be confused.
+
+## 16. Development-only X-Tenant-ID Was Always Accepted
+
+### Problem
+
+`X-Tenant-ID` was added as a convenience for local development. Without any hardening, nothing prevented it from being used in non-development environments. Any client could set an arbitrary `X-Tenant-ID` and the backend would accept it as a valid tenant identity — there was no validation that the caller actually owned that tenant.
+
+### Solution
+
+Two changes were made together:
+
+**1. JWT tenant resolution.** The backend now checks for `Authorization: Bearer <JWT>` on every request. If present, the token is validated against `JWT_SECRET_KEY` and `tenant_id` is extracted from the payload. JWT always wins over `X-Tenant-ID`. An invalid or expired token returns 401 and does not fall through to the header.
+
+**2. `AUTH_DEV_MODE` flag.** `X-Tenant-ID` fallback is now gated behind a config field:
+
+- `AUTH_DEV_MODE=true` — `X-Tenant-ID` / `demo` fallback allowed (local development)
+- `AUTH_DEV_MODE=false` — requests without a valid JWT return 401; header fallback is not accepted
+
+This means the development shortcut is explicit and opt-in, rather than always-on.
+
+### Security Note
+
+Real data isolation still depends on `require_workspace` and SQL filtering by `tenant_id + workspace_id`. JWT tenant resolution determines *who the caller is*; the workspace ownership check and retrieval filters determine *what data they can access*. Both layers are required.
+
+### Tests
+
+- `tests/test_tenant.py` — covers all JWT and AUTH_DEV_MODE scenarios
+- `tests/test_workspace_rag_routes.py` — confirms workspace routes were not broken by the tenant resolution change

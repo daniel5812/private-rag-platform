@@ -45,17 +45,38 @@ Upload document (.txt or .pdf)
 
 **Core principle:** The retrieved chunks are the source of truth. The LLM synthesizes context; it does not invent facts.
 
+## Authentication and Tenant Resolution
+
+Tenant identity is resolved on every request before any data access:
+
+```text
+Incoming request
+→ Authorization: Bearer <JWT> present?
+  Yes → validate JWT signature and expiry
+      → extract tenant_id from payload
+      → proceed with that tenant_id
+  No  → AUTH_DEV_MODE=true?
+      Yes → use X-Tenant-ID header / "demo" fallback
+      No  → return 401
+```
+
+- JWT wins over `X-Tenant-ID` if both headers are present.
+- An invalid or expired JWT always returns 401, regardless of `AUTH_DEV_MODE`.
+- A Bearer token presented when `JWT_SECRET_KEY` is not configured returns 401.
+- `AUTH_DEV_MODE=false` is the production-like mode — no header fallback is allowed.
+
+**This is groundwork, not a complete auth system.** OAuth login, a users table, and tenant membership are not yet implemented. JWTs are currently generated manually for development and testing.
+
 ## Security Boundaries
 
 | Boundary | Mechanism |
 |---|---|
+| Tenant resolution | JWT payload `tenant_id` claim (preferred) or `X-Tenant-ID` header (dev fallback, `AUTH_DEV_MODE=true` only) |
 | Tenant isolation | `tenant_id` column on all tables; all queries filter by tenant |
 | Workspace isolation | `workspace_id` column on documents and chunks; workspace routes filter by workspace |
 | Ownership validation | `require_workspace(workspace_id, tenant_id)` called before every workspace operation |
 | Retrieval SQL | `document_chunks` filtered by `tenant_id` AND `workspace_id` in every workspace-scoped query |
-| Citation validation | `answer_uses_only_allowed_sources` checks that the LLM cites only source IDs from retrieved context — this is a hallucination guardrail, not a security boundary |
-
-**Important:** `X-Tenant-ID` is a development-only tenant mechanism. It is not production authentication. In production, tenant identity must come from a trusted authentication token (JWT or OAuth claims).
+| Citation validation | `answer_uses_only_allowed_sources` checks that the LLM cites only source IDs from retrieved context — this is a hallucination guardrail, **not** a security boundary |
 
 ## Design Principles
 
@@ -100,5 +121,3 @@ Every document and chunk carries both `tenant_id` and `workspace_id`. Retrieval 
 - S3 for private document storage
 - Secrets Manager for credentials
 - CloudWatch for logging and monitoring
-
-git push origin --delete <BRANCH>

@@ -20,17 +20,19 @@ Tenant
 - Dockerized FastAPI backend (API, PostgreSQL, Ollama services)
 - PostgreSQL + pgvector for vector storage and similarity search
 - Document upload: text extraction, chunking, embedding, storage
-- Tenant context via `X-Tenant-ID` header and `get_tenant_id` dependency
+- Tenant context via `X-Tenant-ID` header and `get_tenant_id` dependency (Phase 8)
+- JWT-based tenant resolution groundwork: `Authorization: Bearer <JWT>` validated against `JWT_SECRET_KEY`; `tenant_id` extracted from payload; JWT wins over `X-Tenant-ID`; invalid/expired JWT returns 401
+- `AUTH_DEV_MODE` config flag: when `true`, `X-Tenant-ID` fallback is allowed; when `false`, valid JWT is required
 - Workspace CRUD endpoints
 - Workspace-scoped document upload and document listing
 - Workspace-scoped retrieval and answer generation
 - Shared RAG logic refactored into `app/rag/service.py`
 - Legacy tenant-level RAG endpoints preserved for development/debug
-- Tests covering: tenant handling, retrieval distance filtering, workspace-aware retrieval, workspace RAG routes, answer builder/validator, text extraction, chunking
+- Tests covering: tenant handling, JWT resolution, AUTH_DEV_MODE behavior, retrieval distance filtering, workspace-aware retrieval, workspace RAG routes, answer builder/validator, text extraction, chunking
 
 ## Current API Endpoints
 
-Tenant context is required on every request via `X-Tenant-ID: <tenant>`.
+Tenant context is resolved from `Authorization: Bearer <JWT>` (preferred) or `X-Tenant-ID: <tenant>` (dev fallback when `AUTH_DEV_MODE=true`).
 
 ### Health
 
@@ -97,7 +99,7 @@ These remain active for debugging and backward compatibility. Workspace-scoped e
 
 ```text
 User uploads file into a workspace
-→ API reads tenant_id from X-Tenant-ID
+→ API resolves tenant_id from JWT (or X-Tenant-ID if AUTH_DEV_MODE=true)
 → API validates workspace ownership (require_workspace)
 → Text is extracted from .txt or .pdf
 → Text is split into overlapping chunks
@@ -111,7 +113,7 @@ User uploads file into a workspace
 
 ```text
 User asks a question in a workspace
-→ API reads tenant_id from X-Tenant-ID
+→ API resolves tenant_id from JWT (or X-Tenant-ID if AUTH_DEV_MODE=true)
 → API validates workspace ownership (require_workspace)
 → Query is embedded via Ollama
 → pgvector retrieves similar chunks filtered by tenant_id + workspace_id
@@ -198,6 +200,9 @@ The citation check (`answer_uses_only_allowed_sources`) is a hallucination guard
 Test coverage includes:
 
 - Tenant handling and normalization
+- JWT resolution: valid token, expired token, wrong secret, missing `tenant_id` claim
+- AUTH_DEV_MODE: `X-Tenant-ID` fallback allowed when `true`, rejected when `false`
+- JWT wins over `X-Tenant-ID` when both are present
 - Retrieval distance filtering
 - Workspace-aware retrieval filtering
 - Workspace RAG route behavior
@@ -214,8 +219,9 @@ docker compose -f infra/docker-compose.yml run --rm api pytest tests -v
 
 ## Current Limitations
 
-- No real authentication or JWT yet — `X-Tenant-ID` is a development-only header
-- No user model or user-to-tenant membership
+- No OAuth/login flow yet — JWT groundwork is in place but tokens must be generated manually
+- No user model or user-to-tenant membership yet
+- `X-Tenant-ID` fallback still exists and is active when `AUTH_DEV_MODE=true` — must be `false` in production-like environments
 - Ingestion is synchronous — large uploads block the request
 - No workspace profile or domain inference yet
 - No frontend yet

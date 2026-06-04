@@ -59,9 +59,39 @@ This starts:
 docker compose -f infra/docker-compose.yml run --rm api pytest tests -v
 ```
 
+## Environment Variables
+
+Key variables — set in `.env` or Docker Compose `env_file`:
+
+```env
+JWT_SECRET_KEY=change-me-local-dev-secret
+JWT_ALGORITHM=HS256
+AUTH_DEV_MODE=true
+```
+
+- `JWT_SECRET_KEY` must never be hardcoded. Load from environment or secrets manager.
+- `AUTH_DEV_MODE=true` enables the `X-Tenant-ID` header fallback for local development.
+- `AUTH_DEV_MODE=false` requires a valid JWT on every request (no header fallback).
+
 ## API Overview
 
-Tenant context is passed via the `X-Tenant-ID` header on every request. This is a development-only mechanism — production should use JWT/OAuth.
+### Authentication
+
+JWT is the preferred tenant resolution method:
+
+```http
+Authorization: Bearer <JWT>
+```
+
+The JWT payload must include a `tenant_id` claim:
+
+```json
+{ "tenant_id": "demo" }
+```
+
+When `AUTH_DEV_MODE=true`, the `X-Tenant-ID` header is accepted as a fallback if no `Authorization` header is present. JWT always wins if both are provided.
+
+> No login or OAuth endpoint exists yet. In local dev, tokens must be generated manually with the configured `JWT_SECRET_KEY`.
 
 ### Health
 
@@ -83,29 +113,25 @@ DELETE /workspaces/{workspace_id}
 ### Workspace Document Upload
 
 ```bash
-# Upload a document into a workspace
+# Upload a document into a workspace (JWT)
 curl -X POST "http://localhost:8000/workspaces/{workspace_id}/documents/upload" \
-  -H "X-Tenant-ID: demo" \
+  -H "Authorization: Bearer <JWT>" \
   -F "file=@report.pdf"
 
-# List documents in a workspace
+# List documents in a workspace (JWT)
 curl "http://localhost:8000/workspaces/{workspace_id}/documents" \
-  -H "X-Tenant-ID: demo"
+  -H "Authorization: Bearer <JWT>"
 ```
+
+With `AUTH_DEV_MODE=true`, `X-Tenant-ID: demo` works as a fallback instead.
 
 ### Workspace RAG
 
 ```bash
-# Retrieve relevant chunks (workspace-scoped)
-curl -X POST "http://localhost:8000/workspaces/{workspace_id}/rag/retrieve" \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: demo" \
-  -d '{"query": "What is the access control policy?", "top_k": 3}'
-
-# Ask a question (workspace-scoped)
+# Ask a question (workspace-scoped, JWT)
 curl -X POST "http://localhost:8000/workspaces/{workspace_id}/rag/ask" \
   -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: demo" \
+  -H "Authorization: Bearer <JWT>" \
   -d '{"query": "What is the access control policy?", "top_k": 3}'
 ```
 
@@ -131,7 +157,8 @@ Legacy endpoints remain for development and debugging. The workspace-scoped endp
 
 ## Planned
 
-- JWT/OAuth authentication replacing `X-Tenant-ID`
+- OAuth login flow + internal JWT issuing (groundwork done; login not yet implemented)
+- User model and tenant membership
 - Async background ingestion
 - Workspace profile / domain inference
 - Frontend (React + TypeScript)
