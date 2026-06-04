@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     jwt_secret_key: str | None = None
     jwt_algorithm: str = "HS256"
+    auth_dev_mode: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
