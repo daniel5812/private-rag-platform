@@ -60,4 +60,10 @@ def get_tenant_id(
     if authorization:
         return _decode_jwt_tenant(authorization)
 
-    return normalize_tenant_id(x_tenant_id)
+    if settings.auth_dev_mode:
+        return normalize_tenant_id(x_tenant_id)
+
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required",
+    )
