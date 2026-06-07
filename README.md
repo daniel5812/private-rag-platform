@@ -93,6 +93,22 @@ When `AUTH_DEV_MODE=true`, the `X-Tenant-ID` header is accepted as a fallback if
 
 > No login or OAuth endpoint exists yet. In local dev, tokens must be generated manually with the configured `JWT_SECRET_KEY`.
 
+### Creating a development JWT
+
+When `JWT_SECRET_KEY` is configured, local API requests can use a JWT:
+
+```bash
+export JWT_SECRET_KEY="dev-secret"
+export JWT_ALGORITHM="HS256"
+
+TOKEN=$(./scripts/create-dev-token.py --tenant demo)
+
+curl -s http://localhost:8000/workspaces \
+  -H "Authorization: Bearer $TOKEN"
+
+This is a local development helper only. It is not a login or OAuth flow.
+
+
 ### Health
 
 ```
