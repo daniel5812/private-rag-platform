@@ -29,6 +29,7 @@ Tenant
 - Shared RAG logic refactored into `app/rag/service.py`
 - Legacy tenant-level RAG endpoints preserved for development/debug
 - Tests covering: tenant handling, JWT resolution, AUTH_DEV_MODE behavior, retrieval distance filtering, workspace-aware retrieval, workspace RAG routes, answer builder/validator, text extraction, chunking
+- Added local development JWT helper script for testing JWT-first tenant resolution without a login/OAuth flow.
 
 ## Current API Endpoints
 
